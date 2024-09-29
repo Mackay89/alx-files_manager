@@ -1,59 +1,85 @@
 import redis from 'redis';
-import { promisify } from 'util';
 
-/**
- * Class for performing operations with Redis service
- */
 class RedisClient {
   constructor() {
-    this.client = redis.createClient();
-    this.getAsync = promisify(this.client.get).bind(this.client);
-    this.client.on('error', (error) => {
-      console.log('Redis client not connected to the server: ${error.message}');
+    this.client = redis.createClient({
+      retry_strategy: (options) => {
+        if (options.error && options.error.code === 'ECONNREFUSED') {
+          // End reconnecting on a specific error and flush all commands with an individual error
+          return new Error('The server refused the connection');
+        }
+        if (options.total_retry_time > 1000 * 60 * 60) {
+          // End reconnecting after a specific timeout and flush all commands with an individual error
+          return new Error('Retry time exhausted');
+        }
+        if (options.attempt > 10) {
+          // End reconnecting with built in error
+          return undefined;
+        }
+        // reconnect after
+        return Math.min(options.attempt * 100, 3000);
+      },
     });
-    this.client.on('connect', () => {
-      //   console.log('Redis client connected to the server');
+
+    this.client.on('error', (error) => {
+      console.error(`Redis client error: ${error}`);
     });
   }
 
-  /**
-   * Checks if connection to Redis is Alive
-   * @return true if connection alive or false if not
-   */
   isAlive() {
     return this.client.connected;
   }
 
-  /**
-   * gets value corresponding to key in redis
-   * @key {string} key to search for in redis
-   * @return {string}  value of key
-   */
   async get(key) {
-    const value = await this.getAsync(key);
-    return value;
+    return new Promise((resolve, reject) => {
+      this.client.get(key, (error, reply) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(reply);
+        }
+      });
+    });
   }
 
-  /**
-   * Creates a new key in redis with a specific TTL
-   * @key {string} key to be saved in redis
-   * @value {string} value to be asigned to key
-   * @duration {number} TTL of key
-   * @return {undefined}  No return
-   */
-  async set(key, value, duration) {
-    this.client.setex(key, duration, value);
+  async set(key, value, durationInSeconds) {
+    return new Promise((resolve, reject) => {
+      this.client.setex(key, durationInSeconds, value, (error, reply) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(reply);
+        }
+      });
+    });
   }
 
-  /**
-   * Deletes key in redis service
-   * @key {string} key to be deleted
-   * @return {undefined}  No return
-   */
   async del(key) {
-    this.client.del(key);
+    return new Promise((resolve, reject) => {
+      this.client.del(key, (error, reply) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(reply);
+        }
+      });
+    });
+  }
+
+  // Gracefully quit the Redis connection
+  async quit() {
+    return new Promise((resolve, reject) => {
+      this.client.quit((error, reply) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(reply);
+        }
+      });
+    });
   }
 }
 
 const redisClient = new RedisClient();
-module.exports = redisClient;
+export default redisClient;
+

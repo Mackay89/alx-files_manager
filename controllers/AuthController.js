@@ -18,7 +18,7 @@ class AuthController {
 
     const sha1Password = sha1(password);
 
-    // Find the user associate to this email and with this password
+    // Find the user associated with this email and with this password
     const finishedCreds = { email, password: sha1Password };
     const user = await dbClient.users.findOne(finishedCreds);
     // If no user has been found
@@ -26,7 +26,7 @@ class AuthController {
 
     // Generate a random string (using uuidv4) as token
     const token = uuidv4();
-    const key = auth_${token};
+    const key = `auth_${token}`;  // Use backticks for string interpolation
     const hoursForExpiration = 24;
 
     // Use this key for storing in Redis the user ID for 24 hours
@@ -41,13 +41,14 @@ class AuthController {
   static async getDisconnect(request, response) {
     // retrieve the user from the token
     const token = request.headers['x-token'];
-    const user = await redisClient.get(auth_${token});
+    const user = await redisClient.get(`auth_${token}`);  // Use backticks for string interpolation
     if (!user) return response.status(401).send({ error: 'Unauthorized' });
 
     // delete the token in Redis
-    await redisClient.del(auth_${token});
+    await redisClient.del(`auth_${token}`);  // Use backticks for string interpolation
     return response.status(204).end();
   }
 }
 
-module.exports = AuthController;
+export default AuthController;  // Use export default instead of module.exports
+
