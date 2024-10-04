@@ -1,5 +1,6 @@
 import redis from 'redis'
 
+
 class RedisClient {
   
   constructor() {
@@ -83,4 +84,3 @@ class RedisClient {
 
 const redisClient = new RedisClient()
 export default redisClient
-
